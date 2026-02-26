@@ -15,7 +15,7 @@ pipeline {
         stage('Deploy Backend Containers') {
             steps {
                 sh '''
-                # Clean old containers and network
+                # Clean old containers & network
                 docker rm -f backend1 backend2 nginx-lb || true
                 docker network rm app-network || true
 
@@ -26,7 +26,7 @@ pipeline {
                 docker run -d --name backend1 --network app-network backend-app
                 docker run -d --name backend2 --network app-network backend-app
 
-                # Wait for backend servers to fully start
+                # Wait for backend to fully initialize
                 sleep 5
                 '''
             }
@@ -35,19 +35,34 @@ pipeline {
         stage('Deploy NGINX Load Balancer') {
             steps {
                 sh '''
-                # Start nginx AFTER backend containers are running
-                docker run -d --name nginx-lb --network app-network -p 80:80 nginx
+                # Start nginx on same network
+                docker run -d --name nginx-lb \
+                --network app-network \
+                -p 80:80 nginx
 
-                # Wait for nginx to initialize
+                # Wait for nginx container
                 sleep 3
 
-                # Copy configuration
+                # Copy config
                 docker cp nginx/default.conf nginx-lb:/etc/nginx/conf.d/default.conf
 
                 # Reload nginx
                 docker exec nginx-lb nginx -s reload
 
-                sleep 2
+                # Wait a bit
+                sleep 3
+                '''
+            }
+        }
+
+        stage('Verify Connectivity') {
+            steps {
+                sh '''
+                echo "Testing connectivity from nginx to backend1..."
+                docker exec nginx-lb wget -qO- backend1:8080 || true
+
+                echo "Testing connectivity from nginx to backend2..."
+                docker exec nginx-lb wget -qO- backend2:8080 || true
                 '''
             }
         }
